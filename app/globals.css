@@ -4,44 +4,45 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(0.1 0.02 260);
+  /* Updated color scheme for Matrix/NES aesthetic */
+  --background: oklch(0.05 0.02 260);
   --foreground: oklch(0.95 0 0);
-  --card: oklch(0.15 0.02 260);
+  --card: oklch(0.08 0.02 260);
   --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.15 0.02 260);
+  --popover: oklch(0.08 0.02 260);
   --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.75 0.2 155);
-  --primary-foreground: oklch(0.1 0.02 260);
-  --secondary: oklch(0.2 0.02 260);
+  --primary: oklch(0.75 0.25 155);
+  --primary-foreground: oklch(0.05 0.02 260);
+  --secondary: oklch(0.12 0.02 260);
   --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.25 0.02 260);
-  --muted-foreground: oklch(0.6 0 0);
-  --accent: oklch(0.65 0.25 25);
+  --muted: oklch(0.15 0.02 260);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: oklch(0.7 0.25 340);
   --accent-foreground: oklch(0.95 0 0);
-  --destructive: oklch(0.55 0.25 25);
+  --destructive: oklch(0.6 0.25 25);
   --destructive-foreground: oklch(0.95 0 0);
-  --border: oklch(0.3 0.02 260);
-  --input: oklch(0.2 0.02 260);
-  --ring: oklch(0.75 0.2 155);
-  --chart-1: oklch(0.65 0.2 155);
-  --chart-2: oklch(0.6 0.2 25);
-  --chart-3: oklch(0.5 0.2 260);
-  --chart-4: oklch(0.7 0.15 60);
-  --chart-5: oklch(0.6 0.2 300);
+  --border: oklch(0.2 0.02 155);
+  --input: oklch(0.12 0.02 260);
+  --ring: oklch(0.75 0.25 155);
+  --chart-1: oklch(0.75 0.25 155);
+  --chart-2: oklch(0.7 0.25 340);
+  --chart-3: oklch(0.6 0.2 260);
+  --chart-4: oklch(0.7 0.2 60);
+  --chart-5: oklch(0.65 0.2 200);
   --radius: 0.25rem;
-  --sidebar: oklch(0.12 0.02 260);
+  --sidebar: oklch(0.06 0.02 260);
   --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: oklch(0.75 0.2 155);
-  --sidebar-primary-foreground: oklch(0.1 0.02 260);
-  --sidebar-accent: oklch(0.2 0.02 260);
+  --sidebar-primary: oklch(0.75 0.25 155);
+  --sidebar-primary-foreground: oklch(0.05 0.02 260);
+  --sidebar-accent: oklch(0.12 0.02 260);
   --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.25 0.02 260);
-  --sidebar-ring: oklch(0.75 0.2 155);
+  --sidebar-border: oklch(0.15 0.02 155);
+  --sidebar-ring: oklch(0.75 0.25 155);
 }
 
 @theme inline {
-  --font-sans: "Geist", "Geist Fallback", monospace;
-  --font-mono: "Geist Mono", "Geist Mono Fallback", monospace;
+  --font-sans: "Geist", "Geist Fallback", ui-monospace, monospace;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -101,14 +102,62 @@ canvas {
 }
 
 ::-webkit-scrollbar-track {
-  background: #1a1a2e;
+  background: #0a0a0f;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3a3a5c;
+  background: #00ff8840;
   border-radius: 0;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4a4a6c;
+  background: #00ff8860;
+}
+
+/* Matrix rain animation */
+@keyframes matrix-rain {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.3;
+  }
+  90% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+
+.animate-matrix-rain {
+  animation: matrix-rain linear infinite;
+}
+
+/* Subtle pulse animation for logo */
+@keyframes pulse-subtle {
+  0%,
+  100% {
+    opacity: 1;
+    text-shadow: 0 0 20px rgba(0, 255, 136, 0.6), 0 0 40px rgba(0, 255, 136, 0.3);
+  }
+  50% {
+    opacity: 0.95;
+    text-shadow: 0 0 30px rgba(0, 255, 136, 0.8), 0 0 60px rgba(0, 255, 136, 0.4);
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 3s ease-in-out infinite;
+}
+
+/* Glow effect for active elements */
+.glow-green {
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.3), 0 0 40px rgba(0, 255, 136, 0.1);
+}
+
+.glow-pink {
+  box-shadow: 0 0 20px rgba(255, 68, 136, 0.3), 0 0 40px rgba(255, 68, 136, 0.1);
 }

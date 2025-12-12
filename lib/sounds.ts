@@ -69,77 +69,92 @@ class SoundSystem {
 
   kick() {
     this.init()
-    // Low thump + high click
-    this.playTone(150, 0.1, "square")
-    this.playTone(80, 0.15, "triangle")
-    setTimeout(() => this.playTone(400, 0.05, "square"), 10)
+    this.playTone(180, 0.08, "square")
+    this.playTone(90, 0.12, "triangle")
+    setTimeout(() => this.playTone(500, 0.04, "square"), 5)
+    setTimeout(() => this.playNoise(0.03, 0.1), 0)
   }
 
   pass() {
     this.init()
-    // Softer kick sound
-    this.playTone(200, 0.08, "square")
-    this.playTone(100, 0.1, "triangle")
+    this.playTone(280, 0.06, "triangle")
+    this.playTone(140, 0.08, "sine")
   }
 
   goal() {
     this.init()
-    // Victory fanfare
-    const notes = [523, 659, 784, 1047] // C, E, G, C (major chord arpeggio)
+    const notes = [523, 659, 784, 1047, 1319] // C, E, G, C, E
     notes.forEach((freq, i) => {
-      setTimeout(() => this.playTone(freq, 0.3, "square"), i * 100)
+      setTimeout(() => this.playTone(freq, 0.25, "square"), i * 80)
+      setTimeout(() => this.playTone(freq / 2, 0.3, "triangle"), i * 80 + 20)
     })
-    // Add a final sustained note
-    setTimeout(() => this.playTone(1047, 0.5, "triangle", false), 400)
+    setTimeout(() => this.playTone(1047, 0.6, "triangle", false), 450)
+    setTimeout(() => this.playTone(1319, 0.4, "square"), 500)
   }
 
   slide() {
     this.init()
-    // Sliding/swoosh noise
-    this.playNoise(0.2, 0.15)
-    this.playTone(100, 0.1, "sawtooth")
+    this.playNoise(0.25, 0.12)
+    this.playTone(80, 0.15, "sawtooth")
+    this.playTone(60, 0.2, "triangle")
   }
 
   tackle() {
     this.init()
-    // Impact sound
-    this.playNoise(0.1, 0.25)
-    this.playTone(80, 0.08, "square")
+    this.playNoise(0.12, 0.3)
+    this.playTone(100, 0.1, "square")
+    setTimeout(() => this.playTone(60, 0.08, "triangle"), 30)
   }
 
   grab() {
     this.init()
-    // Catch sound
-    this.playTone(600, 0.05, "square")
-    this.playTone(800, 0.05, "square")
+    this.playTone(500, 0.04, "square")
+    this.playTone(700, 0.04, "square")
+    setTimeout(() => this.playTone(900, 0.06, "triangle"), 30)
   }
 
   bounce() {
     this.init()
-    // Ball hitting wall
-    this.playTone(300, 0.05, "square")
+    this.playTone(350, 0.04, "square")
+    this.playTone(200, 0.06, "triangle")
   }
 
   whistle() {
     this.init()
-    // Referee whistle
-    this.playTone(1200, 0.15, "sine")
-    setTimeout(() => this.playTone(1400, 0.1, "sine"), 150)
-    setTimeout(() => this.playTone(1200, 0.3, "sine"), 250)
+    this.playTone(1100, 0.12, "sine")
+    setTimeout(() => this.playTone(1300, 0.08, "sine"), 120)
+    setTimeout(() => this.playTone(1100, 0.25, "sine"), 200)
+    setTimeout(() => this.playTone(1200, 0.15, "sine"), 350)
   }
 
   select() {
     this.init()
-    // Menu select
-    this.playTone(440, 0.08, "square")
-    setTimeout(() => this.playTone(880, 0.1, "square"), 50)
+    this.playTone(440, 0.06, "square")
+    setTimeout(() => this.playTone(880, 0.08, "square"), 40)
   }
 
   back() {
     this.init()
-    // Menu back
-    this.playTone(440, 0.08, "square")
-    setTimeout(() => this.playTone(220, 0.1, "square"), 50)
+    this.playTone(440, 0.06, "square")
+    setTimeout(() => this.playTone(220, 0.08, "square"), 40)
+  }
+
+  hover() {
+    this.init()
+    this.playTone(600, 0.03, "square")
+  }
+
+  countdown() {
+    this.init()
+    this.playTone(800, 0.1, "square")
+  }
+
+  gameStart() {
+    this.init()
+    this.playTone(523, 0.1, "square")
+    setTimeout(() => this.playTone(659, 0.1, "square"), 100)
+    setTimeout(() => this.playTone(784, 0.15, "square"), 200)
+    setTimeout(() => this.playTone(1047, 0.3, "triangle"), 300)
   }
 }
 
