@@ -33,7 +33,7 @@ export function getGamepadState(index: number): GamepadState {
 
   state.connected = true
 
-  // Left stick / D-pad for movement
+  // Left stick / D-pad for movement either is cool
   const axisX = gamepad.axes[0] || 0
   const axisY = gamepad.axes[1] || 0
 
