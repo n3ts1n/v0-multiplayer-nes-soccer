@@ -303,61 +303,91 @@ export async function getRoomList(): Promise<
   { id: string; name: string; players: number; maxPlayers: number; status: string }[]
 > {
   try {
-    const roomIds = await redis.smembers(ROOM_LIST_KEY)
+    let roomIds: string[] = []
     
-    if (!Array.isArray(roomIds)) {
+    try {
+      const result = await redis.smembers(ROOM_LIST_KEY)
+      
+      // Handle various possible return types from Redis
+      if (result === null || result === undefined) {
+        roomIds = []
+      } else if (Array.isArray(result)) {
+        roomIds = result.filter((id): id is string => typeof id === "string")
+      } else if (typeof result === "string") {
+        roomIds = [result]
+      } else {
+        console.warn("Unexpected smembers result type:", typeof result)
+        roomIds = []
+      }
+    } catch (redisError) {
+      const errorMessage = redisError instanceof Error ? redisError.message : String(redisError)
+      console.error("Redis smembers error:", errorMessage)
       return []
     }
-    
+
+    if (roomIds.length === 0) {
+      return []
+    }
+
     const now = Date.now()
     const result: { id: string; name: string; players: number; maxPlayers: number; status: string }[] = []
 
     for (const roomId of roomIds) {
-      if (typeof roomId !== "string") continue
-      
-      const room = await getRoom(roomId)
-      if (!room) {
-        await redis.srem(ROOM_LIST_KEY, roomId)
-        continue
-      }
+      if (!roomId || typeof roomId !== "string") continue
 
-      // Clean up old rooms (30 minutes with no activity)
-      if (now - room.lastTick > 30 * 60 * 1000) {
-        await redis.srem(ROOM_LIST_KEY, roomId)
-        await redis.del(`${ROOM_KEY}${roomId}`)
-        await redis.del(`${ROOM_PLAYERS_KEY}${roomId}`)
-        continue
-      }
+      try {
+        const room = await getRoom(roomId)
+        
+        if (!room) {
+          // Room doesn't exist, remove from list
+          await redis.srem(ROOM_LIST_KEY, roomId).catch(() => {})
+          continue
+        }
 
-      const players = await getPlayers(roomId)
+        // Clean up old rooms (30 minutes with no activity)
+        if (now - room.lastTick > 30 * 60 * 1000) {
+          await redis.srem(ROOM_LIST_KEY, roomId).catch(() => {})
+          await redis.del(`${ROOM_KEY}${roomId}`).catch(() => {})
+          await redis.del(`${ROOM_PLAYERS_KEY}${roomId}`).catch(() => {})
+          continue
+        }
 
-      // Remove inactive players (15 seconds no update)
-      for (const [playerId, player] of players.entries()) {
-        if (now - player.lastUpdate > 15000) {
-          await removePlayer(roomId, playerId)
-          players.delete(playerId)
+        const players = await getPlayers(roomId)
 
-          // Reset ball if player had it
-          if (player.hasBall) {
-            room.ball.ownerId = null
-            room.ball.isGrabbed = false
-            await saveRoom(room)
+        // Remove inactive players (15 seconds no update)
+        for (const [playerId, player] of players.entries()) {
+          if (now - player.lastUpdate > 15000) {
+            await removePlayer(roomId, playerId).catch(() => {})
+            players.delete(playerId)
+
+            // Reset ball if player had it
+            if (player.hasBall) {
+              room.ball.ownerId = null
+              room.ball.isGrabbed = false
+              await saveRoom(room).catch(() => {})
+            }
           }
         }
-      }
 
-      result.push({
-        id: room.id,
-        name: room.name,
-        players: players.size,
-        maxPlayers: 10,
-        status: room.isPlaying ? "playing" : "waiting",
-      })
+        result.push({
+          id: room.id,
+          name: room.name,
+          players: players.size,
+          maxPlayers: 10,
+          status: room.isPlaying ? "playing" : "waiting",
+        })
+      } catch (roomError) {
+        // Skip this room if there's an error, but continue with others
+        const errorMessage = roomError instanceof Error ? roomError.message : String(roomError)
+        console.warn(`Error processing room ${roomId}:`, errorMessage)
+        continue
+      }
     }
 
     return result
   } catch (e) {
-    console.error("Failed to get room list:", e)
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    console.error("Failed to get room list:", errorMessage)
     return []
   }
 }
