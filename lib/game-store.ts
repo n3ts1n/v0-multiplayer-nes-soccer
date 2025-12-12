@@ -64,113 +64,35 @@ export const PASS_POWER = 9
 export const SLIDE_SPEED = 7
 export const SLIDE_DURATION = 25
 
-// Helper function to create a clean, serializable ball object
-function serializeBall(ball: Ball): Ball {
-  return {
-    x: Number(ball.x) || FIELD_WIDTH / 2,
-    y: Number(ball.y) || FIELD_HEIGHT / 2,
-    velocityX: Number(ball.velocityX) || 0,
-    velocityY: Number(ball.velocityY) || 0,
-    ownerId: ball.ownerId ?? null,
-    isGrabbed: Boolean(ball.isGrabbed),
+// Helper to safely get error message
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return "Unknown error"
   }
 }
 
-// Helper function to create a clean, serializable room object
-function serializeRoom(room: GameRoom): object {
-  return {
-    id: String(room.id),
-    name: String(room.name),
-    ball: serializeBall(room.ball),
-    score: {
-      home: Number(room.score?.home) || 0,
-      away: Number(room.score?.away) || 0,
-    },
-    gameTime: Number(room.gameTime) || 0,
-    isPlaying: Boolean(room.isPlaying),
-    lastGoalTeam: room.lastGoalTeam ?? null,
-    goalCelebration: Number(room.goalCelebration) || 0,
-    lastTick: Number(room.lastTick) || Date.now(),
-    createdAt: Number(room.createdAt) || Date.now(),
-  }
-}
-
-// Helper function to create a clean, serializable player object
-function serializePlayer(player: Player): object {
-  return {
-    id: String(player.id),
-    name: String(player.name).slice(0, 16),
-    x: Number(player.x) || 0,
-    y: Number(player.y) || 0,
-    team: player.team === "away" ? "away" : "home",
-    isGoalkeeper: Boolean(player.isGoalkeeper),
-    hasBall: Boolean(player.hasBall),
-    isSliding: Boolean(player.isSliding),
-    slideTimer: Number(player.slideTimer) || 0,
-    grabTimer: Number(player.grabTimer) || 0,
-    velocityX: Number(player.velocityX) || 0,
-    velocityY: Number(player.velocityY) || 0,
-    facingX: Number(player.facingX) || 1,
-    facingY: Number(player.facingY) || 0,
-    lastUpdate: Number(player.lastUpdate) || Date.now(),
-    animFrame: Number(player.animFrame) || 0,
-  }
-}
-
-// Helper to safely parse a room from Redis
-function parseRoom(data: unknown): GameRoom | null {
-  if (!data || typeof data !== "object") return null
+// Safe JSON parse with fallback
+function safeJsonParse<T>(data: unknown, fallback: T): T {
+  if (data === null || data === undefined) return fallback
   
-  const obj = data as Record<string, unknown>
-  
-  return {
-    id: String(obj.id || ""),
-    name: String(obj.name || "Unknown Room"),
-    ball: {
-      x: Number(obj.ball && typeof obj.ball === "object" ? (obj.ball as Record<string, unknown>).x : FIELD_WIDTH / 2) || FIELD_WIDTH / 2,
-      y: Number(obj.ball && typeof obj.ball === "object" ? (obj.ball as Record<string, unknown>).y : FIELD_HEIGHT / 2) || FIELD_HEIGHT / 2,
-      velocityX: Number(obj.ball && typeof obj.ball === "object" ? (obj.ball as Record<string, unknown>).velocityX : 0) || 0,
-      velocityY: Number(obj.ball && typeof obj.ball === "object" ? (obj.ball as Record<string, unknown>).velocityY : 0) || 0,
-      ownerId: obj.ball && typeof obj.ball === "object" ? ((obj.ball as Record<string, unknown>).ownerId as string | null) ?? null : null,
-      isGrabbed: Boolean(obj.ball && typeof obj.ball === "object" ? (obj.ball as Record<string, unknown>).isGrabbed : false),
-    },
-    score: {
-      home: Number(obj.score && typeof obj.score === "object" ? (obj.score as Record<string, unknown>).home : 0) || 0,
-      away: Number(obj.score && typeof obj.score === "object" ? (obj.score as Record<string, unknown>).away : 0) || 0,
-    },
-    gameTime: Number(obj.gameTime) || 180,
-    isPlaying: obj.isPlaying !== false,
-    lastGoalTeam: (obj.lastGoalTeam as "home" | "away" | null) ?? null,
-    goalCelebration: Number(obj.goalCelebration) || 0,
-    lastTick: Number(obj.lastTick) || Date.now(),
-    createdAt: Number(obj.createdAt) || Date.now(),
+  if (typeof data === "string") {
+    try {
+      return JSON.parse(data) as T
+    } catch {
+      return fallback
+    }
   }
-}
-
-// Helper to safely parse a player from Redis
-function parsePlayer(data: unknown): Player | null {
-  if (!data || typeof data !== "object") return null
   
-  const obj = data as Record<string, unknown>
-  
-  return {
-    id: String(obj.id || ""),
-    name: String(obj.name || "Player"),
-    x: Number(obj.x) || 0,
-    y: Number(obj.y) || 0,
-    team: obj.team === "away" ? "away" : "home",
-    isGoalkeeper: Boolean(obj.isGoalkeeper),
-    hasBall: Boolean(obj.hasBall),
-    isSliding: Boolean(obj.isSliding),
-    slideTimer: Number(obj.slideTimer) || 0,
-    grabTimer: Number(obj.grabTimer) || 0,
-    velocityX: Number(obj.velocityX) || 0,
-    velocityY: Number(obj.velocityY) || 0,
-    facingX: Number(obj.facingX) || 1,
-    facingY: Number(obj.facingY) || 0,
-    lastUpdate: Number(obj.lastUpdate) || Date.now(),
-    animFrame: Number(obj.animFrame) || 0,
+  // If it's already an object, try to use it directly
+  if (typeof data === "object") {
+    return data as T
   }
+  
+  return fallback
 }
 
 export function createInitialBall(): Ball {
@@ -215,53 +137,171 @@ export function getInitialPlayerPosition(
   return pos || { x: FIELD_WIDTH / 2, y: FIELD_HEIGHT / 2 }
 }
 
+// Create a clean room object for storage
+function createCleanRoom(room: GameRoom): Record<string, unknown> {
+  return {
+    id: String(room.id || ""),
+    name: String(room.name || ""),
+    ball: {
+      x: Number(room.ball?.x) || FIELD_WIDTH / 2,
+      y: Number(room.ball?.y) || FIELD_HEIGHT / 2,
+      velocityX: Number(room.ball?.velocityX) || 0,
+      velocityY: Number(room.ball?.velocityY) || 0,
+      ownerId: room.ball?.ownerId ?? null,
+      isGrabbed: Boolean(room.ball?.isGrabbed),
+    },
+    score: {
+      home: Number(room.score?.home) || 0,
+      away: Number(room.score?.away) || 0,
+    },
+    gameTime: Number(room.gameTime) || 180,
+    isPlaying: room.isPlaying !== false,
+    lastGoalTeam: room.lastGoalTeam ?? null,
+    goalCelebration: Number(room.goalCelebration) || 0,
+    lastTick: Number(room.lastTick) || Date.now(),
+    createdAt: Number(room.createdAt) || Date.now(),
+  }
+}
+
+// Create a clean player object for storage
+function createCleanPlayer(player: Player): Record<string, unknown> {
+  return {
+    id: String(player.id || ""),
+    name: String(player.name || "Player").slice(0, 16),
+    x: Number(player.x) || 0,
+    y: Number(player.y) || 0,
+    team: player.team === "away" ? "away" : "home",
+    isGoalkeeper: Boolean(player.isGoalkeeper),
+    hasBall: Boolean(player.hasBall),
+    isSliding: Boolean(player.isSliding),
+    slideTimer: Number(player.slideTimer) || 0,
+    grabTimer: Number(player.grabTimer) || 0,
+    velocityX: Number(player.velocityX) || 0,
+    velocityY: Number(player.velocityY) || 0,
+    facingX: Number(player.facingX) || 1,
+    facingY: Number(player.facingY) || 0,
+    lastUpdate: Number(player.lastUpdate) || Date.now(),
+    animFrame: Number(player.animFrame) || 0,
+  }
+}
+
+// Parse room from Redis data
+function parseRoomData(data: unknown): GameRoom | null {
+  if (!data) return null
+
+  const obj = safeJsonParse<Record<string, unknown>>(data, {})
+  if (!obj || typeof obj !== "object" || !obj.id) return null
+
+  const ball = (obj.ball as Record<string, unknown>) || {}
+  const score = (obj.score as Record<string, unknown>) || {}
+
+  return {
+    id: String(obj.id),
+    name: String(obj.name || "Room"),
+    ball: {
+      x: Number(ball.x) || FIELD_WIDTH / 2,
+      y: Number(ball.y) || FIELD_HEIGHT / 2,
+      velocityX: Number(ball.velocityX) || 0,
+      velocityY: Number(ball.velocityY) || 0,
+      ownerId: (ball.ownerId as string | null) ?? null,
+      isGrabbed: Boolean(ball.isGrabbed),
+    },
+    score: {
+      home: Number(score.home) || 0,
+      away: Number(score.away) || 0,
+    },
+    gameTime: Number(obj.gameTime) ?? 180,
+    isPlaying: obj.isPlaying !== false,
+    lastGoalTeam: (obj.lastGoalTeam as "home" | "away" | null) ?? null,
+    goalCelebration: Number(obj.goalCelebration) || 0,
+    lastTick: Number(obj.lastTick) || Date.now(),
+    createdAt: Number(obj.createdAt) || Date.now(),
+  }
+}
+
+// Parse player from Redis data
+function parsePlayerData(data: unknown): Player | null {
+  if (!data) return null
+
+  const obj = safeJsonParse<Record<string, unknown>>(data, {})
+  if (!obj || typeof obj !== "object" || !obj.id) return null
+
+  return {
+    id: String(obj.id),
+    name: String(obj.name || "Player").slice(0, 16),
+    x: Number(obj.x) || 0,
+    y: Number(obj.y) || 0,
+    team: obj.team === "away" ? "away" : "home",
+    isGoalkeeper: Boolean(obj.isGoalkeeper),
+    hasBall: Boolean(obj.hasBall),
+    isSliding: Boolean(obj.isSliding),
+    slideTimer: Number(obj.slideTimer) || 0,
+    grabTimer: Number(obj.grabTimer) || 0,
+    velocityX: Number(obj.velocityX) || 0,
+    velocityY: Number(obj.velocityY) || 0,
+    facingX: Number(obj.facingX) || 1,
+    facingY: Number(obj.facingY) || 0,
+    lastUpdate: Number(obj.lastUpdate) || Date.now(),
+    animFrame: Number(obj.animFrame) || 0,
+  }
+}
+
 export async function getRoom(roomId: string): Promise<GameRoom | null> {
   try {
+    // Use get and manually parse
     const data = await redis.get(`${ROOM_KEY}${roomId}`)
-    return parseRoom(data)
+    return parseRoomData(data)
   } catch (e) {
-    console.error("Failed to get room:", e)
+    console.error("Failed to get room:", getErrorMessage(e))
     return null
   }
 }
 
 export async function getPlayers(roomId: string): Promise<Map<string, Player>> {
   const map = new Map<string, Player>()
-  
+
   try {
-    const playersObj = await redis.hgetall(`${ROOM_PLAYERS_KEY}${roomId}`)
-    
-    if (playersObj && typeof playersObj === "object") {
-      Object.entries(playersObj).forEach(([id, playerData]) => {
-        const player = parsePlayer(playerData)
-        if (player && player.id) {
-          map.set(id, player)
-        }
-      })
+    // Get all fields from the hash
+    const data = await redis.hgetall(`${ROOM_PLAYERS_KEY}${roomId}`)
+
+    if (!data || typeof data !== "object") {
+      return map
+    }
+
+    // Iterate through the object entries
+    for (const [key, value] of Object.entries(data)) {
+      const player = parsePlayerData(value)
+      if (player && player.id) {
+        map.set(key, player)
+      }
     }
   } catch (e) {
-    console.error("Failed to get players:", e)
+    console.error("Failed to get players:", getErrorMessage(e))
   }
-  
+
   return map
 }
 
 export async function saveRoom(room: GameRoom): Promise<void> {
   try {
-    const cleanRoom = serializeRoom(room)
-    await redis.set(`${ROOM_KEY}${room.id}`, cleanRoom, { ex: 3600 })
+    const cleanRoom = createCleanRoom(room)
+    // Stringify manually to avoid serialization issues
+    await redis.set(`${ROOM_KEY}${room.id}`, JSON.stringify(cleanRoom), { ex: 3600 })
   } catch (e) {
-    console.error("Failed to save room:", e)
+    console.error("Failed to save room:", getErrorMessage(e))
   }
 }
 
 export async function savePlayer(roomId: string, player: Player): Promise<void> {
   try {
-    const cleanPlayer = serializePlayer(player)
-    await redis.hset(`${ROOM_PLAYERS_KEY}${roomId}`, { [player.id]: cleanPlayer })
+    const cleanPlayer = createCleanPlayer(player)
+    // Stringify manually to avoid serialization issues
+    await redis.hset(`${ROOM_PLAYERS_KEY}${roomId}`, {
+      [player.id]: JSON.stringify(cleanPlayer),
+    })
     await redis.expire(`${ROOM_PLAYERS_KEY}${roomId}`, 3600)
   } catch (e) {
-    console.error("Failed to save player:", e)
+    console.error("Failed to save player:", getErrorMessage(e))
   }
 }
 
@@ -269,7 +309,7 @@ export async function removePlayer(roomId: string, playerId: string): Promise<vo
   try {
     await redis.hdel(`${ROOM_PLAYERS_KEY}${roomId}`, playerId)
   } catch (e) {
-    console.error("Failed to remove player:", e)
+    console.error("Failed to remove player:", getErrorMessage(e))
   }
 }
 
@@ -288,12 +328,12 @@ export async function createRoom(roomId: string, name: string): Promise<GameRoom
   }
 
   await saveRoom(room)
-  
+
   try {
     await redis.sadd(ROOM_LIST_KEY, roomId)
     await redis.expire(ROOM_LIST_KEY, 86400)
   } catch (e) {
-    console.error("Failed to add room to list:", e)
+    console.error("Failed to add room to list:", getErrorMessage(e))
   }
 
   return room
@@ -304,11 +344,10 @@ export async function getRoomList(): Promise<
 > {
   try {
     let roomIds: string[] = []
-    
+
     try {
       const result = await redis.smembers(ROOM_LIST_KEY)
-      
-      // Handle various possible return types from Redis
+
       if (result === null || result === undefined) {
         roomIds = []
       } else if (Array.isArray(result)) {
@@ -316,12 +355,10 @@ export async function getRoomList(): Promise<
       } else if (typeof result === "string") {
         roomIds = [result]
       } else {
-        console.warn("Unexpected smembers result type:", typeof result)
         roomIds = []
       }
     } catch (redisError) {
-      const errorMessage = redisError instanceof Error ? redisError.message : String(redisError)
-      console.error("Redis smembers error:", errorMessage)
+      console.error("Redis smembers error:", getErrorMessage(redisError))
       return []
     }
 
@@ -337,9 +374,8 @@ export async function getRoomList(): Promise<
 
       try {
         const room = await getRoom(roomId)
-        
+
         if (!room) {
-          // Room doesn't exist, remove from list
           await redis.srem(ROOM_LIST_KEY, roomId).catch(() => {})
           continue
         }
@@ -360,7 +396,6 @@ export async function getRoomList(): Promise<
             await removePlayer(roomId, playerId).catch(() => {})
             players.delete(playerId)
 
-            // Reset ball if player had it
             if (player.hasBall) {
               room.ball.ownerId = null
               room.ball.isGrabbed = false
@@ -377,17 +412,14 @@ export async function getRoomList(): Promise<
           status: room.isPlaying ? "playing" : "waiting",
         })
       } catch (roomError) {
-        // Skip this room if there's an error, but continue with others
-        const errorMessage = roomError instanceof Error ? roomError.message : String(roomError)
-        console.warn(`Error processing room ${roomId}:`, errorMessage)
+        console.warn(`Error processing room ${roomId}:`, getErrorMessage(roomError))
         continue
       }
     }
 
     return result
   } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e)
-    console.error("Failed to get room list:", errorMessage)
+    console.error("Failed to get room list:", getErrorMessage(e))
     return []
   }
 }
@@ -398,73 +430,82 @@ export async function joinRoom(
   playerName: string,
   team: "home" | "away"
 ): Promise<Player | null> {
-  let room = await getRoom(roomId)
-  if (!room) {
-    room = await createRoom(roomId, `Room ${roomId.slice(-6)}`)
-  }
+  try {
+    let room = await getRoom(roomId)
+    if (!room) {
+      room = await createRoom(roomId, `Room ${roomId.slice(-6)}`)
+    }
 
-  const players = await getPlayers(roomId)
+    const players = await getPlayers(roomId)
 
-  // Check if player already exists
-  const existingPlayer = players.get(playerId)
-  if (existingPlayer) {
-    existingPlayer.lastUpdate = Date.now()
-    await savePlayer(roomId, existingPlayer)
-    return existingPlayer
-  }
+    // Check if player already exists
+    const existingPlayer = players.get(playerId)
+    if (existingPlayer) {
+      existingPlayer.lastUpdate = Date.now()
+      await savePlayer(roomId, existingPlayer)
+      return existingPlayer
+    }
 
-  // Count players on each team
-  let homeCount = 0
-  let awayCount = 0
-  players.forEach((p) => {
-    if (p.team === "home") homeCount++
-    else awayCount++
-  })
+    // Count players on each team
+    let homeCount = 0
+    let awayCount = 0
+    players.forEach((p) => {
+      if (p.team === "home") homeCount++
+      else awayCount++
+    })
 
-  // Limit to 5 per team
-  if ((team === "home" && homeCount >= 5) || (team === "away" && awayCount >= 5)) {
+    // Limit to 5 per team
+    if ((team === "home" && homeCount >= 5) || (team === "away" && awayCount >= 5)) {
+      return null
+    }
+
+    const isGoalkeeper = team === "home" ? homeCount === 0 : awayCount === 0
+    const playerIndex = team === "home" ? homeCount : awayCount
+    const pos = getInitialPlayerPosition(team, playerIndex, isGoalkeeper)
+
+    const player: Player = {
+      id: playerId,
+      name: (playerName || `Player ${players.size + 1}`).slice(0, 16),
+      x: pos.x,
+      y: pos.y,
+      team,
+      isGoalkeeper,
+      hasBall: false,
+      isSliding: false,
+      slideTimer: 0,
+      grabTimer: 0,
+      velocityX: 0,
+      velocityY: 0,
+      facingX: team === "home" ? 1 : -1,
+      facingY: 0,
+      lastUpdate: Date.now(),
+      animFrame: Math.floor(Math.random() * 100),
+    }
+
+    await savePlayer(roomId, player)
+    return player
+  } catch (e) {
+    console.error("Failed to join room:", getErrorMessage(e))
     return null
   }
-
-  const isGoalkeeper = team === "home" ? homeCount === 0 : awayCount === 0
-  const playerIndex = team === "home" ? homeCount : awayCount
-  const pos = getInitialPlayerPosition(team, playerIndex, isGoalkeeper)
-
-  const player: Player = {
-    id: playerId,
-    name: (playerName || `Player ${players.size + 1}`).slice(0, 16),
-    x: pos.x,
-    y: pos.y,
-    team,
-    isGoalkeeper,
-    hasBall: false,
-    isSliding: false,
-    slideTimer: 0,
-    grabTimer: 0,
-    velocityX: 0,
-    velocityY: 0,
-    facingX: team === "home" ? 1 : -1,
-    facingY: 0,
-    lastUpdate: Date.now(),
-    animFrame: Math.floor(Math.random() * 100),
-  }
-
-  await savePlayer(roomId, player)
-  return player
 }
 
 export async function leaveRoom(roomId: string, playerId: string): Promise<void> {
-  const room = await getRoom(roomId)
-  const players = await getPlayers(roomId)
-  const player = players.get(playerId)
+  try {
+    const room = await getRoom(roomId)
+    const players = await getPlayers(roomId)
+    const player = players.get(playerId)
 
-  if (room && player?.hasBall) {
-    room.ball.ownerId = null
-    room.ball.isGrabbed = false
-    await saveRoom(room)
+    if (room && player?.hasBall) {
+      room.ball.ownerId = null
+      room.ball.isGrabbed = false
+      await saveRoom(room)
+    }
+
+    await removePlayer(roomId, playerId)
+  } catch (e) {
+    console.error("Failed to leave room:", getErrorMessage(e))
   }
-
-  await removePlayer(roomId, playerId)
 }
 
 function findNearestTeammate(players: Map<string, Player>, fromPlayer: Player): Player | null {
@@ -495,80 +536,84 @@ export async function handleInput(
   playerId: string,
   input: { dx: number; dy: number; shoot: boolean; slide: boolean; grab: boolean; pass?: boolean }
 ): Promise<void> {
-  const room = await getRoom(roomId)
-  if (!room) return
+  try {
+    const room = await getRoom(roomId)
+    if (!room) return
 
-  const players = await getPlayers(roomId)
-  const player = players.get(playerId)
-  if (!player) return
+    const players = await getPlayers(roomId)
+    const player = players.get(playerId)
+    if (!player) return
 
-  player.lastUpdate = Date.now()
+    player.lastUpdate = Date.now()
 
-  // Clamp and validate input values
-  const dx = Math.max(-1, Math.min(1, Number(input.dx) || 0))
-  const dy = Math.max(-1, Math.min(1, Number(input.dy) || 0))
+    // Clamp and validate input values
+    const dx = Math.max(-1, Math.min(1, Number(input.dx) || 0))
+    const dy = Math.max(-1, Math.min(1, Number(input.dy) || 0))
 
-  // Handle movement
-  if (dx !== 0 || dy !== 0) {
-    const magnitude = Math.sqrt(dx * dx + dy * dy)
-    if (magnitude > 0) {
-      player.facingX = dx / magnitude
-      player.facingY = dy / magnitude
+    // Handle movement
+    if (dx !== 0 || dy !== 0) {
+      const magnitude = Math.sqrt(dx * dx + dy * dy)
+      if (magnitude > 0) {
+        player.facingX = dx / magnitude
+        player.facingY = dy / magnitude
+
+        if (!player.isSliding) {
+          player.velocityX = (dx / magnitude) * PLAYER_SPEED
+          player.velocityY = (dy / magnitude) * PLAYER_SPEED
+        }
+      }
     }
 
-    if (!player.isSliding) {
-      player.velocityX = (dx / magnitude) * PLAYER_SPEED
-      player.velocityY = (dy / magnitude) * PLAYER_SPEED
-    }
-  }
-
-  // Handle shooting
-  if (input.shoot && player.hasBall) {
-    player.hasBall = false
-    room.ball.ownerId = null
-    room.ball.isGrabbed = false
-    room.ball.velocityX = player.facingX * SHOOT_POWER
-    room.ball.velocityY = player.facingY * SHOOT_POWER
-  }
-
-  // Handle passing
-  if (input.pass && player.hasBall) {
-    const teammate = findNearestTeammate(players, player)
-    if (teammate) {
+    // Handle shooting
+    if (input.shoot && player.hasBall) {
       player.hasBall = false
       room.ball.ownerId = null
       room.ball.isGrabbed = false
-      const tdx = teammate.x - player.x
-      const tdy = teammate.y - player.y
-      const dist = Math.sqrt(tdx * tdx + tdy * tdy)
-      if (dist > 0) {
-        room.ball.velocityX = (tdx / dist) * PASS_POWER
-        room.ball.velocityY = (tdy / dist) * PASS_POWER
+      room.ball.velocityX = player.facingX * SHOOT_POWER
+      room.ball.velocityY = player.facingY * SHOOT_POWER
+    }
+
+    // Handle passing
+    if (input.pass && player.hasBall) {
+      const teammate = findNearestTeammate(players, player)
+      if (teammate) {
+        player.hasBall = false
+        room.ball.ownerId = null
+        room.ball.isGrabbed = false
+        const tdx = teammate.x - player.x
+        const tdy = teammate.y - player.y
+        const dist = Math.sqrt(tdx * tdx + tdy * tdy)
+        if (dist > 0) {
+          room.ball.velocityX = (tdx / dist) * PASS_POWER
+          room.ball.velocityY = (tdy / dist) * PASS_POWER
+        }
       }
     }
-  }
 
-  // Handle sliding
-  if (input.slide && !player.isSliding && !player.hasBall) {
-    player.isSliding = true
-    player.slideTimer = SLIDE_DURATION
-  }
-
-  // Handle goalkeeper grab
-  if (input.grab && player.isGoalkeeper && !room.ball.ownerId) {
-    const bdx = player.x - room.ball.x
-    const bdy = player.y - room.ball.y
-    const dist = Math.sqrt(bdx * bdx + bdy * bdy)
-
-    if (dist < PLAYER_SIZE * 2.5) {
-      player.hasBall = true
-      room.ball.ownerId = player.id
-      room.ball.isGrabbed = true
+    // Handle sliding
+    if (input.slide && !player.isSliding && !player.hasBall) {
+      player.isSliding = true
+      player.slideTimer = SLIDE_DURATION
     }
-  }
 
-  await savePlayer(roomId, player)
-  await saveRoom(room)
+    // Handle goalkeeper grab
+    if (input.grab && player.isGoalkeeper && !room.ball.ownerId) {
+      const bdx = player.x - room.ball.x
+      const bdy = player.y - room.ball.y
+      const dist = Math.sqrt(bdx * bdx + bdy * bdy)
+
+      if (dist < PLAYER_SIZE * 2.5) {
+        player.hasBall = true
+        room.ball.ownerId = player.id
+        room.ball.isGrabbed = true
+      }
+    }
+
+    await savePlayer(roomId, player)
+    await saveRoom(room)
+  } catch (e) {
+    console.error("Failed to handle input:", getErrorMessage(e))
+  }
 }
 
 function resetPositions(room: GameRoom, players: Map<string, Player>): void {
@@ -602,160 +647,163 @@ function resetPositions(room: GameRoom, players: Map<string, Player>): void {
 }
 
 export async function updateGame(roomId: string): Promise<void> {
-  const room = await getRoom(roomId)
-  if (!room || !room.isPlaying) return
+  try {
+    const room = await getRoom(roomId)
+    if (!room || !room.isPlaying) return
 
-  const players = await getPlayers(roomId)
-  const now = Date.now()
-  const deltaMs = now - room.lastTick
+    const players = await getPlayers(roomId)
+    const now = Date.now()
+    const deltaMs = now - room.lastTick
 
-  // Only update if enough time has passed (prevent too frequent updates)
-  if (deltaMs < 16) return
+    // Only update if enough time has passed
+    if (deltaMs < 16) return
 
-  const deltaFrames = Math.min(10, Math.floor(deltaMs / 16.67))
-  room.lastTick = now
+    const deltaFrames = Math.min(10, Math.floor(deltaMs / 16.67))
+    room.lastTick = now
 
-  let needsReset = false
+    let needsReset = false
 
-  for (let frame = 0; frame < deltaFrames; frame++) {
-    // Handle goal celebration
-    if (room.goalCelebration > 0) {
-      room.goalCelebration--
-      if (room.goalCelebration === 0) {
-        needsReset = true
-      }
-      continue
-    }
-
-    // Update game time (roughly every 60 frames = 1 second)
-    if (room.gameTime > 0) {
-      // Use deterministic time decrease based on elapsed time
-      const secondsElapsed = Math.floor((now - room.createdAt) / 1000)
-      room.gameTime = Math.max(0, 180 - secondsElapsed)
-    }
-
-    // Update players
-    players.forEach((player) => {
-      if (Math.abs(player.velocityX) > 0.3 || Math.abs(player.velocityY) > 0.3) {
-        player.animFrame += 0.5
-      }
-
-      if (player.isSliding) {
-        player.slideTimer--
-        if (player.slideTimer <= 0) {
-          player.isSliding = false
-        } else {
-          player.x += player.facingX * SLIDE_SPEED
-          player.y += player.facingY * SLIDE_SPEED
+    for (let frame = 0; frame < deltaFrames; frame++) {
+      // Handle goal celebration
+      if (room.goalCelebration > 0) {
+        room.goalCelebration--
+        if (room.goalCelebration === 0) {
+          needsReset = true
         }
-      }
-
-      player.x += player.velocityX
-      player.y += player.velocityY
-      player.velocityX *= 0.88
-      player.velocityY *= 0.88
-
-      player.x = Math.max(PLAYER_SIZE, Math.min(FIELD_WIDTH - PLAYER_SIZE, player.x))
-      player.y = Math.max(PLAYER_SIZE, Math.min(FIELD_HEIGHT - PLAYER_SIZE, player.y))
-
-      if (player.hasBall && !room.ball.isGrabbed) {
-        room.ball.x = player.x + player.facingX * (PLAYER_SIZE / 2 + BALL_SIZE / 2 + 2)
-        room.ball.y = player.y + player.facingY * (PLAYER_SIZE / 2 + BALL_SIZE / 2 + 2)
-        room.ball.velocityX = 0
-        room.ball.velocityY = 0
-        room.ball.ownerId = player.id
-      }
-
-      if (player.isGoalkeeper && player.hasBall && room.ball.isGrabbed) {
-        room.ball.x = player.x
-        room.ball.y = player.y - PLAYER_SIZE / 2 - BALL_SIZE
-      }
-    })
-
-    // Update ball physics
-    if (!room.ball.ownerId) {
-      room.ball.x += room.ball.velocityX
-      room.ball.y += room.ball.velocityY
-      room.ball.velocityX *= BALL_FRICTION
-      room.ball.velocityY *= BALL_FRICTION
-
-      if (room.ball.y < BALL_SIZE || room.ball.y > FIELD_HEIGHT - BALL_SIZE) {
-        room.ball.velocityY *= -0.8
-        room.ball.y = Math.max(BALL_SIZE, Math.min(FIELD_HEIGHT - BALL_SIZE, room.ball.y))
-      }
-
-      const goalTop = FIELD_HEIGHT / 2 - GOAL_HEIGHT / 2
-      const goalBottom = FIELD_HEIGHT / 2 + GOAL_HEIGHT / 2
-
-      if (room.ball.x < 25 && room.ball.y > goalTop && room.ball.y < goalBottom) {
-        room.score.away++
-        room.lastGoalTeam = "away"
-        room.goalCelebration = 150
         continue
       }
 
-      if (room.ball.x > FIELD_WIDTH - 25 && room.ball.y > goalTop && room.ball.y < goalBottom) {
-        room.score.home++
-        room.lastGoalTeam = "home"
-        room.goalCelebration = 150
-        continue
+      // Update game time based on elapsed real time
+      if (room.gameTime > 0) {
+        const secondsElapsed = Math.floor((now - room.createdAt) / 1000)
+        room.gameTime = Math.max(0, 180 - secondsElapsed)
       }
 
-      if (room.ball.x < BALL_SIZE || room.ball.x > FIELD_WIDTH - BALL_SIZE) {
-        room.ball.velocityX *= -0.8
-        room.ball.x = Math.max(BALL_SIZE, Math.min(FIELD_WIDTH - BALL_SIZE, room.ball.x))
-      }
-    }
+      // Update players
+      players.forEach((player) => {
+        if (Math.abs(player.velocityX) > 0.3 || Math.abs(player.velocityY) > 0.3) {
+          player.animFrame += 0.5
+        }
 
-    // Check ball pickup
-    players.forEach((player) => {
-      if (player.hasBall || room.ball.ownerId) return
+        if (player.isSliding) {
+          player.slideTimer--
+          if (player.slideTimer <= 0) {
+            player.isSliding = false
+          } else {
+            player.x += player.facingX * SLIDE_SPEED
+            player.y += player.facingY * SLIDE_SPEED
+          }
+        }
 
-      const dx = player.x - room.ball.x
-      const dy = player.y - room.ball.y
-      const dist = Math.sqrt(dx * dx + dy * dy)
+        player.x += player.velocityX
+        player.y += player.velocityY
+        player.velocityX *= 0.88
+        player.velocityY *= 0.88
 
-      if (dist < PLAYER_SIZE / 2 + BALL_SIZE / 2 + 4) {
-        player.hasBall = true
-        room.ball.ownerId = player.id
-        room.ball.isGrabbed = false
-      }
-    })
+        player.x = Math.max(PLAYER_SIZE, Math.min(FIELD_WIDTH - PLAYER_SIZE, player.x))
+        player.y = Math.max(PLAYER_SIZE, Math.min(FIELD_HEIGHT - PLAYER_SIZE, player.y))
 
-    // Check slide tackles
-    players.forEach((slidingPlayer) => {
-      if (!slidingPlayer.isSliding) return
+        if (player.hasBall && !room.ball.isGrabbed) {
+          room.ball.x = player.x + player.facingX * (PLAYER_SIZE / 2 + BALL_SIZE / 2 + 2)
+          room.ball.y = player.y + player.facingY * (PLAYER_SIZE / 2 + BALL_SIZE / 2 + 2)
+          room.ball.velocityX = 0
+          room.ball.velocityY = 0
+          room.ball.ownerId = player.id
+        }
 
-      players.forEach((targetPlayer) => {
-        if (targetPlayer.id === slidingPlayer.id) return
-        if (targetPlayer.team === slidingPlayer.team) return
-        if (!targetPlayer.hasBall) return
-
-        const dx = slidingPlayer.x - targetPlayer.x
-        const dy = slidingPlayer.y - targetPlayer.y
-        const dist = Math.sqrt(dx * dx + dy * dy)
-
-        if (dist < PLAYER_SIZE * 1.8) {
-          targetPlayer.hasBall = false
-          room.ball.ownerId = null
-          room.ball.isGrabbed = false
-          room.ball.velocityX = (Math.random() - 0.5) * 6
-          room.ball.velocityY = (Math.random() - 0.5) * 6
+        if (player.isGoalkeeper && player.hasBall && room.ball.isGrabbed) {
+          room.ball.x = player.x
+          room.ball.y = player.y - PLAYER_SIZE / 2 - BALL_SIZE
         }
       })
-    })
-  }
 
-  // Save all players
-  if (needsReset) {
-    resetPositions(room, players)
-  }
+      // Update ball physics
+      if (!room.ball.ownerId) {
+        room.ball.x += room.ball.velocityX
+        room.ball.y += room.ball.velocityY
+        room.ball.velocityX *= BALL_FRICTION
+        room.ball.velocityY *= BALL_FRICTION
 
-  for (const [, player] of players.entries()) {
-    await savePlayer(roomId, player)
-  }
+        if (room.ball.y < BALL_SIZE || room.ball.y > FIELD_HEIGHT - BALL_SIZE) {
+          room.ball.velocityY *= -0.8
+          room.ball.y = Math.max(BALL_SIZE, Math.min(FIELD_HEIGHT - BALL_SIZE, room.ball.y))
+        }
 
-  await saveRoom(room)
+        const goalTop = FIELD_HEIGHT / 2 - GOAL_HEIGHT / 2
+        const goalBottom = FIELD_HEIGHT / 2 + GOAL_HEIGHT / 2
+
+        if (room.ball.x < 25 && room.ball.y > goalTop && room.ball.y < goalBottom) {
+          room.score.away++
+          room.lastGoalTeam = "away"
+          room.goalCelebration = 150
+          continue
+        }
+
+        if (room.ball.x > FIELD_WIDTH - 25 && room.ball.y > goalTop && room.ball.y < goalBottom) {
+          room.score.home++
+          room.lastGoalTeam = "home"
+          room.goalCelebration = 150
+          continue
+        }
+
+        if (room.ball.x < BALL_SIZE || room.ball.x > FIELD_WIDTH - BALL_SIZE) {
+          room.ball.velocityX *= -0.8
+          room.ball.x = Math.max(BALL_SIZE, Math.min(FIELD_WIDTH - BALL_SIZE, room.ball.x))
+        }
+      }
+
+      // Check ball pickup
+      players.forEach((player) => {
+        if (player.hasBall || room.ball.ownerId) return
+
+        const dx = player.x - room.ball.x
+        const dy = player.y - room.ball.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+
+        if (dist < PLAYER_SIZE / 2 + BALL_SIZE / 2 + 4) {
+          player.hasBall = true
+          room.ball.ownerId = player.id
+          room.ball.isGrabbed = false
+        }
+      })
+
+      // Check slide tackles
+      players.forEach((slidingPlayer) => {
+        if (!slidingPlayer.isSliding) return
+
+        players.forEach((targetPlayer) => {
+          if (targetPlayer.id === slidingPlayer.id) return
+          if (targetPlayer.team === slidingPlayer.team) return
+          if (!targetPlayer.hasBall) return
+
+          const dx = slidingPlayer.x - targetPlayer.x
+          const dy = slidingPlayer.y - targetPlayer.y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+
+          if (dist < PLAYER_SIZE * 1.8) {
+            targetPlayer.hasBall = false
+            room.ball.ownerId = null
+            room.ball.isGrabbed = false
+            room.ball.velocityX = (Math.random() - 0.5) * 6
+            room.ball.velocityY = (Math.random() - 0.5) * 6
+          }
+        })
+      })
+    }
+
+    // Save all players
+    if (needsReset) {
+      resetPositions(room, players)
+    }
+
+    for (const [, player] of players.entries()) {
+      await savePlayer(roomId, player)
+    }
+
+    await saveRoom(room)
+  } catch (e) {
+    console.error("Failed to update game:", getErrorMessage(e))
+  }
 }
 
 export async function getGameState(roomId: string): Promise<{
@@ -782,49 +830,54 @@ export async function getGameState(roomId: string): Promise<{
   lastGoalTeam: "home" | "away" | null
   goalCelebration: number
 } | null> {
-  const room = await getRoom(roomId)
-  if (!room) return null
+  try {
+    const room = await getRoom(roomId)
+    if (!room) return null
 
-  await updateGame(roomId)
+    await updateGame(roomId)
 
-  // Refetch after update
-  const updatedRoom = await getRoom(roomId)
-  const players = await getPlayers(roomId)
+    // Refetch after update
+    const updatedRoom = await getRoom(roomId)
+    const players = await getPlayers(roomId)
 
-  if (!updatedRoom) return null
+    if (!updatedRoom) return null
 
-  return {
-    players: Array.from(players.values()).map((p) => ({
-      id: p.id,
-      name: p.name,
-      x: p.x,
-      y: p.y,
-      team: p.team,
-      isGoalkeeper: p.isGoalkeeper,
-      hasBall: p.hasBall,
-      isSliding: p.isSliding,
-      slideTimer: p.slideTimer,
-      velocityX: p.velocityX,
-      velocityY: p.velocityY,
-      facingX: p.facingX,
-      facingY: p.facingY,
-      animFrame: p.animFrame,
-    })),
-    ball: {
-      x: updatedRoom.ball.x,
-      y: updatedRoom.ball.y,
-      velocityX: updatedRoom.ball.velocityX,
-      velocityY: updatedRoom.ball.velocityY,
-      ownerId: updatedRoom.ball.ownerId,
-      isGrabbed: updatedRoom.ball.isGrabbed,
-    },
-    score: {
-      home: updatedRoom.score.home,
-      away: updatedRoom.score.away,
-    },
-    gameTime: updatedRoom.gameTime,
-    isPlaying: updatedRoom.isPlaying,
-    lastGoalTeam: updatedRoom.lastGoalTeam,
-    goalCelebration: updatedRoom.goalCelebration,
+    return {
+      players: Array.from(players.values()).map((p) => ({
+        id: p.id,
+        name: p.name,
+        x: p.x,
+        y: p.y,
+        team: p.team,
+        isGoalkeeper: p.isGoalkeeper,
+        hasBall: p.hasBall,
+        isSliding: p.isSliding,
+        slideTimer: p.slideTimer,
+        velocityX: p.velocityX,
+        velocityY: p.velocityY,
+        facingX: p.facingX,
+        facingY: p.facingY,
+        animFrame: p.animFrame,
+      })),
+      ball: {
+        x: updatedRoom.ball.x,
+        y: updatedRoom.ball.y,
+        velocityX: updatedRoom.ball.velocityX,
+        velocityY: updatedRoom.ball.velocityY,
+        ownerId: updatedRoom.ball.ownerId,
+        isGrabbed: updatedRoom.ball.isGrabbed,
+      },
+      score: {
+        home: updatedRoom.score.home,
+        away: updatedRoom.score.away,
+      },
+      gameTime: updatedRoom.gameTime,
+      isPlaying: updatedRoom.isPlaying,
+      lastGoalTeam: updatedRoom.lastGoalTeam,
+      goalCelebration: updatedRoom.goalCelebration,
+    }
+  } catch (e) {
+    console.error("Failed to get game state:", getErrorMessage(e))
+    return null
   }
 }
